@@ -181,20 +181,17 @@ class MapleStoryNoticeController(
         }
     }
 </style>
-                <script>
-                    let clickCount = 0;
-                    function handleHiddenClick(event) {
-                        if (event.target === document.body || event.target === document.documentElement) {
-                            clickCount++;
-                            if (clickCount === 5) {
-                                alert("♥유진님 사랑해♥");
-                                clickCount = 0;
-                            }
-                        } else {
-                            clickCount = 0; 
-                        }
-                    }
-                </script>
+<script>
+    let clickCount = 0;
+    function handleHiddenClick() {
+        // 어디를 누르든 묻지도 따지지도 않고 카운트 증가
+        clickCount++;
+        if (clickCount === 5) {
+            alert("♥유진님 사랑해♥");
+            clickCount = 0;
+        }
+    }
+</script>
             </head>
             <body onclick="handleHiddenClick(event)">
                 <div class="event-card">
