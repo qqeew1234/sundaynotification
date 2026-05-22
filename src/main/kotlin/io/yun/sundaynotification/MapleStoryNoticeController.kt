@@ -199,7 +199,7 @@ class MapleStoryNoticeController(
             <body onclick="handleHiddenClick(event)">
                 <div class="event-card">
                     <div class="event-header">
-                        <div class="site-brand">일요일 요정 🧚‍♂️</div>
+                   
                         <h2 class="event-title">
                             <a href="${latestNotice.url}" target="_blank">${latestNotice.title}</a>
                         </h2>
