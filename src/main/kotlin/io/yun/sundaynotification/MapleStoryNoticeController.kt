@@ -51,16 +51,16 @@ class MapleStoryNoticeController(
         val detail = mapleStoryNoticeService.getEventDetail(latestNotice.noticeId)
 
         return """
-            <html>
-            <head>
-                <meta charset="UTF-8">
-                <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                <title>최신 썬데이 메이플 알림</title>
-                <!-- 눈이 편안하고 트렌디한 구글 한글 폰트 적용 -->
-                <link rel="preconnect" href="https://fonts.googleapis.com">
-                <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-                <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&display=swap" rel="stylesheet">
-     <style>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>일요일 요정 | 썬데이 메이플 알림</title>
+    
+    <link rel="icon" type="image/png" href="/favicon.png">
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+<style>
     /* === [라이트 모드] 따뜻한 아이보리 톤 통합 === */
     html, body { 
         background-color: #f9f8f6 !important; 
