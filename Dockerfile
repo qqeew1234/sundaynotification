@@ -1,16 +1,16 @@
-# 1단계: 빌드용 컨테이너 (프로젝트의 높은 자바 버전을 수용할 수 있도록 최신 버전 적용)
-FROM eclipse-temurin:21-jdk-alpine AS build
+# 1단계: 빌드용 컨테이너 (Java 25 완벽 지원 최신 환경)
+FROM openjdk:25-ea-jdk-slim AS build
 WORKDIR /app
 COPY . .
-# 리눅스 환경에서 gradlew가 실행될 수 있도록 권한 부여
+# 리눅스 환경에서 gradlew 실행 권한 부여
 RUN chmod +x ./gradlew
-# Render의 메모리 제한을 고려하여 안전하게 빌드 진행
+# Render 무료 플랜 메모리 한계를 고려하여 빌드 진행
 RUN ./gradlew clean bootJar --no-daemon
 
-# 2단계: 실행용 컨테이너 (경량화된 alpine 실행 환경)
-FROM eclipse-temurin:21-jre-alpine
+# 2단계: 실행용 컨테이너
+FROM openjdk:25-ea-slim
 WORKDIR /app
-# 빌드 스테이지에서 생성된 jar 파일만 복사
+# 빌드 컨테이너에서 완성된 jar 파일만 복사
 COPY --from=build /app/build/libs/*.jar app.jar
-# Render가 동적으로 부여하는 포트에 바인딩
+# Render 동적 포트 바인딩
 ENTRYPOINT ["sh", "-c", "java -jar app.jar --server.port=$PORT"]
