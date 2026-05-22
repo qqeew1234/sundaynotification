@@ -23,6 +23,8 @@ class MapleStoryNoticeController(
                 <head>
                     <meta charset="UTF-8">
                     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                    <title>일요일 요정</title>
+                    <link rel="icon" type="image/png" href="/favicon.png">
                     <style>
                         body { 
                             background: #fafafa; 
@@ -55,7 +57,7 @@ class MapleStoryNoticeController(
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>일요일 요정 | 썬데이 메이플 알림</title>
+    <title>일요일 요정</title>
     
     <link rel="icon" type="image/png" href="/favicon.png">
     
@@ -98,7 +100,17 @@ class MapleStoryNoticeController(
         box-sizing: border-box;
     }
     
-    /* 썬데이 메이플 메인 타이틀 */
+    /* 🚀 서비스 고유 브랜딩 타이틀 스타일 */
+    .site-brand {
+        font-size: 1.1em;
+        font-weight: 900;
+        color: #e67e22;
+        letter-spacing: 1px;
+        margin-bottom: 8px;
+        text-transform: uppercase;
+    }
+    
+    /* 썬데이 메이플 공지 타이틀 */
     .event-title { 
         font-size: 1.8em; 
         font-weight: 800;
@@ -127,7 +139,6 @@ class MapleStoryNoticeController(
     }
     /* 달력 아이콘과 글자 사이 여백 */
     .event-date::before {
-      
         margin-right: 4px;
         font-size: 0.95em;
     }
@@ -158,6 +169,9 @@ class MapleStoryNoticeController(
         .event-card { 
             background: #1a1919; 
         }
+        .site-brand {
+            color: #ffb74d;
+        }
         .event-title a { 
             color: #ffb74d; 
         }
@@ -170,7 +184,6 @@ class MapleStoryNoticeController(
                 <script>
                     let clickCount = 0;
                     function handleHiddenClick(event) {
-                        // event-card 내부 클릭은 제외 (빈 공간 클릭만 감지)
                         if (event.target === document.body || event.target === document.documentElement) {
                             clickCount++;
                             if (clickCount === 5) {
@@ -178,7 +191,7 @@ class MapleStoryNoticeController(
                                 clickCount = 0;
                             }
                         } else {
-                            clickCount = 0; // 카드 내부 클릭 시 초기화 (선택 사항)
+                            clickCount = 0; 
                         }
                     }
                 </script>
@@ -186,6 +199,7 @@ class MapleStoryNoticeController(
             <body onclick="handleHiddenClick(event)">
                 <div class="event-card">
                     <div class="event-header">
+                        <div class="site-brand">일요일 요정 🧚‍♂️</div>
                         <h2 class="event-title">
                             <a href="${latestNotice.url}" target="_blank">${latestNotice.title}</a>
                         </h2>
