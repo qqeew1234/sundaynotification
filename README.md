@@ -12,7 +12,7 @@
 
 ## 기술 스택
 
-- Kotlin 2.2.21
+- Kotlin 2.3 (기존: 2.2.21)
 - Spring Boot 4.0.6
 - Gradle Kotlin DSL
 - Java 24

@@ -2,6 +2,7 @@ package io.yun.sundaynotification
 
 import org.springframework.stereotype.Service
 import org.springframework.web.client.RestClient
+import java.time.OffsetDateTime
 
 @Service
 class MapleStoryNoticeService {
@@ -27,7 +28,13 @@ class MapleStoryNoticeService {
     }
 
     fun getSundayEvents(): List<EventNotice> {
-        return getEventNotices().filter { it.title.contains("썬데이") || it.title.contains("일요일") }
+        return getSundayEvents(getEventNotices(), OffsetDateTime.now())
+    }
+
+    fun getSundayEvents(notices: List<EventNotice>, now: OffsetDateTime): List<EventNotice> {
+        return notices.filter { 
+            (it.title.contains("썬데이") || it.title.contains("일요일")) && it.dateEventEnd.isAfter(now)
+        }
     }
 
     fun getEventDetail(noticeId: Long): EventDetailResponse? {
