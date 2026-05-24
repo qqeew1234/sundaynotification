@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>일요일 요정</title>
+    <link rel="icon" type="image/png" href="/favicon.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="stylesheet" href="/style.css">
+    <script src="/app.js" defer></script>
+</head>
+<body>
+<button class="top-left-icon" type="button" aria-label="숨겨진 이벤트 열기">
+    <img src="/favicon.png" alt="">
+</button>
+<section class="secret-chat" aria-live="polite" hidden>
+    <div class="secret-chat-header">
+        <span>메시지</span>
+        <button class="secret-chat-close" type="button" aria-label="채팅 닫기">×</button>
+    </div>
+    <div class="secret-chat-body">
+        <p class="secret-chat-message">♥유진님 사랑해♥</p>
+    </div>
+</section>
+
+<main class="event-card" th:if="${notice != null}">
+    <header class="event-header">
+        <h2 class="event-title">
+            <a th:href="${notice.url}" target="_blank" rel="noopener noreferrer" th:text="${notice.title}"></a>
+        </h2>
+        <div class="event-date">
+            기간:
+            <span th:text="${startAt}"></span>
+            ~
+            <span th:text="${endAt}"></span>
+        </div>
+    </header>
+    <section class="event-content" th:utext="${contents}"></section>
+</main>
+
+<main class="empty-state" th:unless="${notice != null}">
+    <h1>진행 중인 썬데이 메이플 이벤트가 없습니다.</h1>
+</main>
+</body>
+</html>
