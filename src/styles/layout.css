@@ -110,6 +110,12 @@
   border-radius: 14px;
 }
 
+.push-toggle-btn.is-active {
+  background: var(--glass-badge-bg);
+  border-color: var(--glass-border-strong);
+  color: var(--brand-primary);
+}
+
 .is-spinning {
   display: inline-flex;
   animation: spin 0.8s linear infinite;

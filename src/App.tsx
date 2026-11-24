@@ -5,6 +5,7 @@ import { EmptyState } from './components/EmptyState.tsx';
 import { EventCard } from './components/EventCard.tsx';
 import { Header } from './components/Header.tsx';
 import { AlertCircleIcon, RefreshIcon } from './components/icons.tsx';
+import { usePushNotification } from './hooks/usePushNotification.ts';
 import { useTheme } from './hooks/useTheme.ts';
 import { useToast } from './hooks/useToast.ts';
 
@@ -22,6 +23,7 @@ function formatChecked(iso: string): string {
 export default function App() {
   const { isDark, toggleTheme } = useTheme();
   const { message, showToast } = useToast();
+  const push = usePushNotification(showToast);
   const [state, setState] = useState<LoadState>({ kind: 'loading' });
   const [refreshing, setRefreshing] = useState(false);
 
@@ -123,6 +125,10 @@ export default function App() {
             onToggleTheme={toggleTheme}
             onRefresh={() => void load(true)}
             isRefreshing={refreshing}
+            isPushSupported={push.isSupported}
+            isPushSubscribed={push.isSubscribed}
+            isPushLoading={push.isLoading}
+            onTogglePush={() => void push.togglePush()}
           />
           <main className="main-column">{body}</main>
         </div>

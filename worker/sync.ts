@@ -5,6 +5,8 @@ import {
   shouldShowShowcase,
 } from './nexon.ts';
 import type { SundayEventApiResponse, SundayEventNotice } from './nexon.ts';
+import { notifySubscribersIfNewImage } from './push.ts';
+import type { PushKvStore, VapidConfig } from './push.ts';
 
 export const KV_CACHE_KEY = 'sunday:event:v1';
 export const KV_SYNC_STATE_KEY = 'sunday:sync-state:v1';
@@ -35,6 +37,17 @@ export type ScheduledSyncResult =
   | { action: 'failed'; attempts: number }
   | { action: 'skipped_success'; attempts: number }
   | { action: 'skipped_exhausted'; attempts: number };
+
+export interface SyncOptions {
+  vapid?: VapidConfig | null;
+  pushKv?: PushKvStore;
+  throwOnDetailError?: boolean;
+}
+
+function isPushKvStore(kv: KvStore): kv is PushKvStore {
+  const candidate = kv as Partial<PushKvStore>;
+  return typeof candidate.delete === 'function' && typeof candidate.list === 'function';
+}
 
 export async function readCachedSundayEvent(kv: KvStore): Promise<CachedSundayEvent | null> {
   try {
@@ -105,9 +118,15 @@ export async function syncSundayEventToKv(
   kv: KvStore,
   apiKey: string,
   now: Date = new Date(),
-  fetchImpl: typeof fetch = fetch
+  fetchImpl: typeof fetch = fetch,
+  options?: SyncOptions
 ): Promise<SundayEventApiResponse> {
-  const result = await fetchSundayEvent(apiKey, now, fetchImpl);
+  const result = await fetchSundayEvent(
+    apiKey,
+    now,
+    fetchImpl,
+    options?.throwOnDetailError ?? false
+  );
   const payload: CachedSundayEvent = {
     notice: result.notice,
     fetchedAt: result.fetchedAt,
@@ -115,6 +134,23 @@ export async function syncSundayEventToKv(
   await kv.put(KV_CACHE_KEY, JSON.stringify(payload), {
     expirationTtl: KV_TTL_SECONDS,
   });
+
+  if (result.notice?.imageUrl && options?.vapid) {
+    const pushTarget = options.pushKv ?? (isPushKvStore(kv) ? kv : null);
+    if (pushTarget) {
+      try {
+        await notifySubscribersIfNewImage(pushTarget, options.vapid, result.notice, now, fetchImpl);
+      } catch (err) {
+        console.error(
+          JSON.stringify({
+            message: 'push_dispatch_unhandled_error',
+            error: err instanceof Error ? err.message : String(err),
+          })
+        );
+      }
+    }
+  }
+
   return result;
 }
 
@@ -122,7 +158,8 @@ export async function runScheduledSync(
   kv: KvStore,
   apiKey: string,
   now: Date = new Date(),
-  fetchImpl: typeof fetch = fetch
+  fetchImpl: typeof fetch = fetch,
+  options?: Omit<SyncOptions, 'throwOnDetailError'>
 ): Promise<ScheduledSyncResult> {
   const todayKst = getKstDateString(now);
   const state = await readSyncState(kv);
@@ -154,7 +191,10 @@ export async function runScheduledSync(
   const nowIso = now.toISOString();
 
   try {
-    await syncSundayEventToKv(kv, apiKey, now, fetchImpl);
+    await syncSundayEventToKv(kv, apiKey, now, fetchImpl, {
+      ...options,
+      throwOnDetailError: true,
+    });
     await writeSyncState(kv, {
       dateKst: todayKst,
       status: 'success',

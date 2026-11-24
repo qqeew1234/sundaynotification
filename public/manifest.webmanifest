@@ -1,0 +1,21 @@
+{
+  "name": "일요일 요정",
+  "short_name": "일요일 요정",
+  "description": "이번 주 썬데이 메이플 이벤트를 한눈에 확인하고 알림을 받아보세요.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#fdf8f3",
+  "theme_color": "#ff8d28",
+  "icons": [
+    {
+      "src": "/favicon.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/favicon.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

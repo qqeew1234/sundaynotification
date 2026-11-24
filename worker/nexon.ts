@@ -28,8 +28,10 @@ export interface ShowcaseInfo {
 }
 
 export interface SundayEventNotice {
+  noticeId: number;
   title: string;
   url: string;
+  imageUrl: string;
   startAt: string;
   endAt: string;
   dateEventEnd: string;
@@ -96,6 +98,17 @@ export function sanitizeUrl(rawUrl: string): string {
   return '';
 }
 
+export function extractFirstImageUrl(html: string): string {
+  const imgRegex = /<img\b[^>]*\bsrc\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/gi;
+  let match: RegExpExecArray | null;
+  while ((match = imgRegex.exec(html)) !== null) {
+    const rawSrc = (match[1] ?? match[2] ?? match[3] ?? '').replace(/&amp;/gi, '&');
+    const safe = sanitizeUrl(rawSrc);
+    if (safe) return safe;
+  }
+  return '';
+}
+
 function isDangerousUriScheme(raw: string): boolean {
   const normalized = raw.replace(/[\u0000-\u0020]+/g, '').toLowerCase();
   return (
@@ -152,7 +165,8 @@ async function getJson<T>(fetchImpl: typeof fetch, url: string, apiKey: string):
 export async function fetchSundayEvent(
   apiKey: string,
   now: Date = new Date(),
-  fetchImpl: typeof fetch = fetch
+  fetchImpl: typeof fetch = fetch,
+  throwOnDetailError: boolean = false
 ): Promise<SundayEventApiResponse> {
   const list = await getJson<EventNoticeResponse>(fetchImpl, `${API_BASE}/notice-event`, apiKey);
   const latest = pickLatestSundayEvent(list.event_notice ?? [], now);
@@ -175,10 +189,16 @@ export async function fetchSundayEvent(
           error: err instanceof Error ? err.message : String(err),
         })
       );
+      if (throwOnDetailError) {
+        throw err;
+      }
     }
+    const imageUrl = extractFirstImageUrl(contents) || sanitizeUrl(latest.thumbnail_url ?? '');
     notice = {
+      noticeId: latest.notice_id,
       title: latest.title,
       url: sanitizeUrl(latest.url),
+      imageUrl,
       startAt: formatKstDateTime(latest.date_event_start),
       endAt: formatKstDateTime(latest.date_event_end),
       dateEventEnd: latest.date_event_end,

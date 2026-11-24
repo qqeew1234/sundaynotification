@@ -7,6 +7,10 @@
   "upload_source_maps": true,
   "workers_dev": false,
   "preview_urls": false,
+  "vars": {
+    "VAPID_PUBLIC_KEY": "BCJJ4ckemYqx2cKRQO8K_qhhW3EgQosoDQc1W17xIO8ZDNpitujmqirqWbPTUV-79qQxvAU34hnSemO_IKw6cMY",
+    "VAPID_SUBJECT": "mailto:admin@yunyun.page"
+  },
   "assets": {
     "not_found_handling": "single-page-application",
     "binding": "ASSETS",

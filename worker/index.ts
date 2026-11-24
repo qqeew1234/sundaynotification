@@ -1,15 +1,26 @@
 import { SHOWCASE_INFO, shouldShowShowcase } from './nexon.ts';
 import type { SundayEventApiResponse } from './nexon.ts';
 import {
+  deleteSubscription,
+  isValidPushEndpoint,
+  saveSubscription,
+  validatePushSubscription,
+} from './push.ts';
+import type { VapidConfig } from './push.ts';
+import {
   readCachedSundayEvent,
   runScheduledSync,
   syncSundayEventToKv,
   toApiResponse,
 } from './sync.ts';
 
+const PROD_ORIGIN = 'https://sundaynotification.yunyun.page';
+const MAX_BODY_BYTES = 4096;
+
 const CSP_POLICY = [
   "default-src 'self'",
   "script-src 'self'",
+  "worker-src 'self'",
   "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net",
   "font-src 'self' https://cdn.jsdelivr.net data:",
   "img-src 'self' https: data:",
@@ -34,6 +45,34 @@ function withSecurityHeaders(response: Response): Response {
     statusText: response.statusText,
     headers,
   });
+}
+
+function getVapidConfig(env: Env): VapidConfig | null {
+  const publicKey = env.VAPID_PUBLIC_KEY?.trim();
+  const privateKey = env.VAPID_PRIVATE_KEY?.trim();
+  const subject = env.VAPID_SUBJECT?.trim();
+  if (!publicKey || !privateKey || !subject) return null;
+  return { publicKey, privateKey, subject };
+}
+
+function isAllowedOrigin(request: Request, url: URL): boolean {
+  const origin = request.headers.get('Origin');
+  if (!origin) return false;
+  return origin === url.origin || origin === PROD_ORIGIN;
+}
+
+async function readBoundedJson(request: Request): Promise<unknown | null> {
+  const contentLength = Number(request.headers.get('Content-Length') ?? '0');
+  if (Number.isFinite(contentLength) && contentLength > MAX_BODY_BYTES) {
+    return null;
+  }
+  const text = await request.text();
+  if (text.length > MAX_BODY_BYTES) return null;
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    return null;
+  }
 }
 
 function emptyBody(
@@ -73,7 +112,9 @@ async function handleSundayEvent(env: Env): Promise<Response> {
   }
 
   try {
-    const body = await syncSundayEventToKv(env.SUNDAY_KV, apiKey, now);
+    const body = await syncSundayEventToKv(env.SUNDAY_KV, apiKey, now, fetch, {
+      vapid: getVapidConfig(env),
+    });
     return Response.json(body, {
       status: 200,
       headers: {
@@ -95,6 +136,46 @@ async function handleSundayEvent(env: Env): Promise<Response> {
   }
 }
 
+async function handleSubscribe(request: Request, env: Env, url: URL): Promise<Response> {
+  if (!isAllowedOrigin(request, url)) {
+    return Response.json({ error: 'Forbidden' }, { status: 403, headers: { 'Cache-Control': 'no-store' } });
+  }
+  const body = await readBoundedJson(request);
+  const sub = validatePushSubscription(body);
+  if (!sub) {
+    return Response.json(
+      { error: '유효하지 않은 푸시 구독 정보입니다.' },
+      { status: 400, headers: { 'Cache-Control': 'no-store' } }
+    );
+  }
+  await saveSubscription(env.SUNDAY_KV, sub);
+  return Response.json(
+    { status: 'subscribed' },
+    { status: 201, headers: { 'Cache-Control': 'no-store' } }
+  );
+}
+
+async function handleUnsubscribe(request: Request, env: Env, url: URL): Promise<Response> {
+  if (!isAllowedOrigin(request, url)) {
+    return Response.json({ error: 'Forbidden' }, { status: 403, headers: { 'Cache-Control': 'no-store' } });
+  }
+  const body = await readBoundedJson(request);
+  const rawEndpoint =
+    body && typeof body === 'object' ? (body as Record<string, unknown>).endpoint : undefined;
+  const endpoint = typeof rawEndpoint === 'string' ? isValidPushEndpoint(rawEndpoint.trim()) : null;
+  if (!endpoint) {
+    return Response.json(
+      { error: '유효하지 않은 엔드포인트입니다.' },
+      { status: 400, headers: { 'Cache-Control': 'no-store' } }
+    );
+  }
+  await deleteSubscription(env.SUNDAY_KV, endpoint);
+  return Response.json(
+    { status: 'unsubscribed' },
+    { status: 200, headers: { 'Cache-Control': 'no-store' } }
+  );
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
@@ -112,6 +193,29 @@ export default {
         }
         if (request.method === 'GET' && path === '/api/sunday-event') {
           return withSecurityHeaders(await handleSundayEvent(env));
+        }
+        if (request.method === 'GET' && path === '/api/push/vapid-public-key') {
+          const publicKey = env.VAPID_PUBLIC_KEY?.trim();
+          if (!publicKey) {
+            return withSecurityHeaders(
+              Response.json(
+                { error: 'VAPID_PUBLIC_KEY가 설정되지 않았습니다.' },
+                { status: 503, headers: { 'Cache-Control': 'no-store' } }
+              )
+            );
+          }
+          return withSecurityHeaders(
+            Response.json(
+              { publicKey },
+              { status: 200, headers: { 'Cache-Control': 'public, max-age=3600' } }
+            )
+          );
+        }
+        if (request.method === 'POST' && path === '/api/push/subscribe') {
+          return withSecurityHeaders(await handleSubscribe(request, env, url));
+        }
+        if (request.method === 'POST' && path === '/api/push/unsubscribe') {
+          return withSecurityHeaders(await handleUnsubscribe(request, env, url));
         }
         return withSecurityHeaders(
           Response.json({ error: 'Not found' }, { status: 404, headers: { 'Cache-Control': 'no-store' } })
@@ -138,6 +242,10 @@ export default {
       console.error(JSON.stringify({ message: 'scheduled_sync_missing_api_key' }));
       return;
     }
-    ctx.waitUntil(runScheduledSync(env.SUNDAY_KV, apiKey, new Date(controller.scheduledTime)));
+    ctx.waitUntil(
+      runScheduledSync(env.SUNDAY_KV, apiKey, new Date(controller.scheduledTime), fetch, {
+        vapid: getVapidConfig(env),
+      })
+    );
   },
 } satisfies ExportedHandler<Env>;

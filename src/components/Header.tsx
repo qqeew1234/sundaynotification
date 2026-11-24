@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { CloseIcon, MoonIcon, RefreshIcon, SunIcon } from './icons.tsx';
+import { BellIcon, BellRingIcon, CloseIcon, MoonIcon, RefreshIcon, SunIcon } from './icons.tsx';
 
 const SECRET_MESSAGES = ['♥유진님 사랑해♥', '♥정말루 사랑해♥', '♥세상에서 제일 사랑해♥'];
 
@@ -8,9 +8,22 @@ interface HeaderProps {
   onToggleTheme: () => void;
   onRefresh: () => void;
   isRefreshing: boolean;
+  isPushSupported: boolean;
+  isPushSubscribed: boolean;
+  isPushLoading: boolean;
+  onTogglePush: () => void;
 }
 
-export function Header({ isDark, onToggleTheme, onRefresh, isRefreshing }: HeaderProps) {
+export function Header({
+  isDark,
+  onToggleTheme,
+  onRefresh,
+  isRefreshing,
+  isPushSupported,
+  isPushSubscribed,
+  isPushLoading,
+  onTogglePush,
+}: HeaderProps) {
   const [open, setOpen] = useState(false);
   const [message, setMessage] = useState('');
   const groupRef = useRef<HTMLDivElement>(null);
@@ -77,6 +90,19 @@ export function Header({ isDark, onToggleTheme, onRefresh, isRefreshing }: Heade
         </div>
 
         <div className="header-actions">
+          {isPushSupported && (
+            <button
+              type="button"
+              className={`glass-btn theme-toggle-btn push-toggle-btn ${isPushSubscribed ? 'is-active' : ''}`}
+              onClick={onTogglePush}
+              disabled={isPushLoading}
+              aria-pressed={isPushSubscribed}
+              aria-label={isPushSubscribed ? '썬데이 메이플 푸시 알림 끄기' : '썬데이 메이플 푸시 알림 켜기'}
+              title={isPushSubscribed ? '썬데이 메이플 푸시 알림 끄기' : '썬데이 메이플 푸시 알림 켜기'}
+            >
+              {isPushSubscribed ? <BellRingIcon size={19} /> : <BellIcon size={19} />}
+            </button>
+          )}
           <button
             type="button"
             className="glass-btn theme-toggle-btn"
