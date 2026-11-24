@@ -1,10 +1,30 @@
-import { SHOWCASE_INFO, fetchSundayEvent, shouldShowShowcase } from './nexon.ts';
+import { SHOWCASE_INFO, shouldShowShowcase } from './nexon.ts';
 import type { SundayEventApiResponse } from './nexon.ts';
+import {
+  readCachedSundayEvent,
+  runScheduledSync,
+  syncSundayEventToKv,
+  toApiResponse,
+} from './sync.ts';
 
-const CACHE_KEY = 'https://cache.sundaynotification.internal/api/sunday-event';
+const CSP_POLICY = [
+  "default-src 'self'",
+  "script-src 'self'",
+  "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net",
+  "font-src 'self' https://cdn.jsdelivr.net data:",
+  "img-src 'self' https: data:",
+  "connect-src 'self'",
+  "object-src 'none'",
+  "base-uri 'none'",
+  "frame-ancestors 'none'",
+  "form-action 'self'",
+  'upgrade-insecure-requests',
+].join('; ');
 
 function withSecurityHeaders(response: Response): Response {
   const headers = new Headers(response.headers);
+  headers.set('Content-Security-Policy', CSP_POLICY);
+  headers.set('Strict-Transport-Security', 'max-age=15552000; includeSubDomains');
   headers.set('X-Content-Type-Options', 'nosniff');
   headers.set('X-Frame-Options', 'DENY');
   headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
@@ -31,8 +51,19 @@ function emptyBody(
   };
 }
 
-async function handleSundayEvent(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+async function handleSundayEvent(env: Env): Promise<Response> {
   const now = new Date();
+  const cached = await readCachedSundayEvent(env.SUNDAY_KV);
+  if (cached) {
+    return Response.json(toApiResponse(cached, now), {
+      status: 200,
+      headers: {
+        'Cache-Control': 'no-cache',
+        'CDN-Cache-Control': 'public, max-age=60',
+      },
+    });
+  }
+
   const apiKey = env.NEXON_API_KEY?.trim();
   if (!apiKey) {
     return Response.json(emptyBody('unconfigured', 'NEXON_API_KEY 시크릿이 설정되지 않았습니다.', now), {
@@ -41,24 +72,15 @@ async function handleSundayEvent(request: Request, env: Env, ctx: ExecutionConte
     });
   }
 
-  const url = new URL(request.url);
-  const refresh = url.searchParams.get('refresh') === '1';
-  const cache = caches.default;
-  const cacheKey = new Request(CACHE_KEY);
-
-  if (!refresh) {
-    const hit = await cache.match(cacheKey);
-    if (hit) return hit;
-  }
-
   try {
-    const body = await fetchSundayEvent(apiKey, now);
-    const response = Response.json(body, {
+    const body = await syncSundayEventToKv(env.SUNDAY_KV, apiKey, now);
+    return Response.json(body, {
       status: 200,
-      headers: { 'Cache-Control': 'public, max-age=300, s-maxage=300' },
+      headers: {
+        'Cache-Control': 'no-cache',
+        'CDN-Cache-Control': 'public, max-age=60',
+      },
     });
-    ctx.waitUntil(cache.put(cacheKey, response.clone()));
-    return response;
   } catch (err) {
     console.error(
       JSON.stringify({
@@ -74,7 +96,7 @@ async function handleSundayEvent(request: Request, env: Env, ctx: ExecutionConte
 }
 
 export default {
-  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+  async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
     const path = url.pathname;
 
@@ -82,17 +104,18 @@ export default {
       if (path.startsWith('/api/')) {
         if (request.method === 'GET' && path === '/api/health') {
           return withSecurityHeaders(
-            Response.json({
-              status: 'ok',
-              service: 'sundaynotification',
-              hasApiKey: Boolean(env.NEXON_API_KEY?.trim()),
-            })
+            Response.json(
+              { status: 'ok', service: 'sundaynotification' },
+              { headers: { 'Cache-Control': 'no-store' } }
+            )
           );
         }
         if (request.method === 'GET' && path === '/api/sunday-event') {
-          return withSecurityHeaders(await handleSundayEvent(request, env, ctx));
+          return withSecurityHeaders(await handleSundayEvent(env));
         }
-        return withSecurityHeaders(Response.json({ error: 'Not found' }, { status: 404 }));
+        return withSecurityHeaders(
+          Response.json({ error: 'Not found' }, { status: 404, headers: { 'Cache-Control': 'no-store' } })
+        );
       }
       return withSecurityHeaders(await env.ASSETS.fetch(request));
     } catch (err) {
@@ -103,7 +126,18 @@ export default {
           error: err instanceof Error ? err.message : String(err),
         })
       );
-      return withSecurityHeaders(Response.json({ error: 'Internal server error' }, { status: 500 }));
+      return withSecurityHeaders(
+        Response.json({ error: 'Internal server error' }, { status: 500, headers: { 'Cache-Control': 'no-store' } })
+      );
     }
+  },
+
+  async scheduled(controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+    const apiKey = env.NEXON_API_KEY?.trim();
+    if (!apiKey) {
+      console.error(JSON.stringify({ message: 'scheduled_sync_missing_api_key' }));
+      return;
+    }
+    ctx.waitUntil(runScheduledSync(env.SUNDAY_KV, apiKey, new Date(controller.scheduledTime)));
   },
 } satisfies ExportedHandler<Env>;

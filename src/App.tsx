@@ -25,18 +25,22 @@ export default function App() {
   const [state, setState] = useState<LoadState>({ kind: 'loading' });
   const [refreshing, setRefreshing] = useState(false);
 
-  const load = useCallback(async (refresh: boolean) => {
-    setRefreshing(true);
-    try {
-      const res = await fetch(refresh ? '/api/sunday-event?refresh=1' : '/api/sunday-event');
-      const data = (await res.json()) as SundayEventApiResponse;
-      setState({ kind: 'done', data });
-    } catch {
-      setState({ kind: 'failed', message: '서버에 연결할 수 없습니다.' });
-    } finally {
-      setRefreshing(false);
-    }
-  }, []);
+  const load = useCallback(
+    async (manual: boolean) => {
+      setRefreshing(true);
+      try {
+        const res = await fetch('/api/sunday-event', manual ? { cache: 'no-store' } : undefined);
+        const data = (await res.json()) as SundayEventApiResponse;
+        setState({ kind: 'done', data });
+        if (manual) showToast('최신 정보를 확인했어요');
+      } catch {
+        setState({ kind: 'failed', message: '서버에 연결할 수 없습니다.' });
+      } finally {
+        setRefreshing(false);
+      }
+    },
+    [showToast]
+  );
 
   useEffect(() => {
     void load(false);
@@ -89,13 +93,12 @@ export default function App() {
         />
       );
     } else if (data.notice) {
-      const url = data.notice.url;
       body = (
         <EventCard
           notice={data.notice}
           showShowcase={data.showShowcase}
           showcase={data.showcase}
-          onCopy={() => void copyLink(url)}
+          onCopy={(url) => void copyLink(url)}
         />
       );
     } else {
@@ -125,8 +128,8 @@ export default function App() {
         </div>
         <footer className="app-footer">
           <div className="footer-glass-box glass-panel">
-            <span>Data based on NEXON Open API</span>
-            {checkedAt && <p className="footer-data-meta">마지막 확인 (KST): {formatChecked(checkedAt)}</p>}
+            <span>매일 오전 10시(KST) 자동 갱신 · Data based on NEXON Open API</span>
+            {checkedAt && <p className="footer-data-meta">마지막 동기화 (KST): {formatChecked(checkedAt)}</p>}
           </div>
         </footer>
       </div>

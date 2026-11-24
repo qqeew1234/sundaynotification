@@ -1,6 +1,7 @@
 const API_BASE = 'https://open.api.nexon.com/maplestory/v1';
 const SHOWCASE_LIMIT = Date.parse('2026-06-14T00:00:00+09:00');
 const DETAIL_FALLBACK = '상세 내용을 불러올 수 없습니다.';
+const FETCH_TIMEOUT_MS = 15_000;
 
 export interface EventNotice {
   title: string;
@@ -31,6 +32,7 @@ export interface SundayEventNotice {
   url: string;
   startAt: string;
   endAt: string;
+  dateEventEnd: string;
   contentsHtml: string;
 }
 
@@ -72,26 +74,79 @@ export function formatKstDateTime(iso: string): string {
   return `${kst.getUTCFullYear()}-${p(kst.getUTCMonth() + 1)}-${p(kst.getUTCDate())} ${p(kst.getUTCHours())}:${p(kst.getUTCMinutes())}`;
 }
 
+export function getKstDateString(now: Date): string {
+  const kst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
+  const p = (v: number) => String(v).padStart(2, '0');
+  return `${kst.getUTCFullYear()}-${p(kst.getUTCMonth() + 1)}-${p(kst.getUTCDate())}`;
+}
+
 export function shouldShowShowcase(now: Date): boolean {
   return now.getTime() < SHOWCASE_LIMIT;
 }
 
+export function sanitizeUrl(rawUrl: string): string {
+  try {
+    const parsed = new URL(rawUrl.trim());
+    if (parsed.protocol === 'https:' || parsed.protocol === 'http:') {
+      return parsed.toString();
+    }
+  } catch {
+    // invalid URL
+  }
+  return '';
+}
+
+function isDangerousUriScheme(raw: string): boolean {
+  const normalized = raw.replace(/[\u0000-\u0020]+/g, '').toLowerCase();
+  return (
+    normalized.startsWith('javascript:') ||
+    normalized.startsWith('vbscript:') ||
+    normalized.startsWith('data:text/html') ||
+    normalized.startsWith('data:image/svg+xml')
+  );
+}
+
 export function sanitizeNoticeHtml(html: string): string {
   return html
-    .replace(/<(script|style|iframe|object|embed|form)\b[^>]*>[\s\S]*?<\/\1\s*>/gi, '')
-    .replace(/<\/?(script|style|iframe|object|embed|form)\b[^>]*>/gi, '')
-    .replace(/\s+on[a-z]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, '')
-    .replace(/(href|src)\s*=\s*("|')\s*(javascript:|data:text\/html)[^"']*\2/gi, '$1=$2#$2');
+    .replace(
+      /<(script|style|iframe|object|embed|form|svg|math|template|noscript|applet)\b[^>]*>[\s\S]*?<\/\1\s*>/gi,
+      ''
+    )
+    .replace(
+      /<\/?(script|style|iframe|object|embed|form|svg|math|template|noscript|applet|base|meta|link|input|button|textarea|select)\b[^>]*>/gi,
+      ''
+    )
+    .replace(/\s+srcdoc\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, '')
+    .replace(/\s+on[a-z]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, '')
+    .replace(
+      /\b(href|src|action|formaction|xlink:href)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/gi,
+      (_match, attr: string, dq: string | undefined, sq: string | undefined, uq: string | undefined) => {
+        const val = dq ?? sq ?? uq ?? '';
+        if (isDangerousUriScheme(val)) {
+          return `${attr}="#"`;
+        }
+        if (dq !== undefined) return `${attr}="${dq}"`;
+        if (sq !== undefined) return `${attr}='${sq}'`;
+        return `${attr}=${val}`;
+      }
+    );
 }
 
 async function getJson<T>(fetchImpl: typeof fetch, url: string, apiKey: string): Promise<T> {
-  const res = await fetchImpl(url, {
-    headers: { accept: 'application/json', 'x-nxopen-api-key': apiKey },
-  });
-  if (!res.ok) {
-    throw new Error(`Nexon API responded ${res.status}`);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  try {
+    const res = await fetchImpl(url, {
+      signal: controller.signal,
+      headers: { accept: 'application/json', 'x-nxopen-api-key': apiKey },
+    });
+    if (!res.ok) {
+      throw new Error(`Nexon API responded ${res.status}`);
+    }
+    return (await res.json()) as T;
+  } finally {
+    clearTimeout(timer);
   }
-  return (await res.json()) as T;
 }
 
 export async function fetchSundayEvent(
@@ -123,9 +178,10 @@ export async function fetchSundayEvent(
     }
     notice = {
       title: latest.title,
-      url: latest.url,
+      url: sanitizeUrl(latest.url),
       startAt: formatKstDateTime(latest.date_event_start),
       endAt: formatKstDateTime(latest.date_event_end),
+      dateEventEnd: latest.date_event_end,
       contentsHtml: contents,
     };
   }

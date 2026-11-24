@@ -5,10 +5,21 @@
   "compatibility_date": "2026-11-24",
   "compatibility_flags": ["nodejs_compat"],
   "upload_source_maps": true,
+  "workers_dev": false,
+  "preview_urls": false,
   "assets": {
     "not_found_handling": "single-page-application",
     "binding": "ASSETS",
     "run_worker_first": ["/api/*"]
+  },
+  "kv_namespaces": [
+    {
+      "binding": "SUNDAY_KV",
+      "id": "2e82e2ae554740cf92b7f417509f2bc1"
+    }
+  ],
+  "triggers": {
+    "crons": ["0-3 1 * * *"]
   },
   "observability": {
     "enabled": true,
