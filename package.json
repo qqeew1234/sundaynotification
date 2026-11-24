@@ -1,0 +1,30 @@
+{
+  "name": "sundaynotification",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "cf:types": "wrangler types",
+    "typecheck": "tsc -b",
+    "test": "node --test tests/nexon.test.ts",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "deploy:dry-run": "vite build && wrangler deploy --dry-run",
+    "deploy": "vite build && wrangler deploy"
+  },
+  "dependencies": {
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
+  },
+  "devDependencies": {
+    "@cloudflare/vite-plugin": "^1.70.1",
+    "@types/node": "^24.19.2",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.2",
+    "typescript": "~6.0.3",
+    "vite": "^8.3.4",
+    "wrangler": "^4.167.0"
+  }
+}
