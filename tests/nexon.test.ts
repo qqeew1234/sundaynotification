@@ -20,7 +20,7 @@ import {
   validatePushSubscription,
 } from '../worker/push.ts';
 import type { PushKvStore, VapidConfig } from '../worker/push.ts';
-import { KV_CACHE_KEY, runScheduledSync, toApiResponse } from '../worker/sync.ts';
+import { KV_CACHE_KEY, isKstFriday, runScheduledSync, toApiResponse } from '../worker/sync.ts';
 import type { CachedSundayEvent } from '../worker/sync.ts';
 
 const now = new Date('2026-05-25T01:00:00+09:00');
@@ -303,4 +303,67 @@ test('runScheduledSync: 10:00 KST 성공 시 10:01 재시도 생략 & 4회 실�
     await runScheduledSync(kvFail, 'k', new Date('2026-05-25T10:04:00+09:00'), failFetch),
     { action: 'skipped_exhausted', attempts: 4 }
   );
+});
+
+test('runScheduledSync: 금요일 공지 지연 시 대기 후 공지·이미지 수신 즉시 푸시 발송', async () => {
+  const friday1000 = new Date('2026-11-27T10:00:00+09:00');
+  assert.equal(isKstFriday(friday1000), true);
+  assert.equal(isKstFriday(new Date('2026-11-26T10:00:00+09:00')), false);
+
+  const kv = createMockKv();
+  const vapid = await generateTestVapid();
+  await saveSubscription(kv, sampleSub, friday1000);
+
+  let step = 0;
+  let pushCalls = 0;
+  const delayedNotice: EventNotice = {
+    title: '썬데이 메이플',
+    url: 'https://maplestory.nexon.com/News/Event/1421',
+    thumbnail_url: 'https://cdn.example.com/thumb-1421.png',
+    notice_id: 1421,
+    date: '2026-11-27T10:00+09:00',
+    date_event_start: '2026-11-29T10:00+09:00',
+    date_event_end: '2026-11-29T23:59+09:00',
+  };
+
+  const mockFetch = (async (input: string | URL | Request) => {
+    const url = String(input);
+    if (url.includes('open.api.nexon.com')) {
+      if (step < 3) {
+        return Response.json({ event_notice: [] });
+      }
+      if (url.includes('/detail')) {
+        return Response.json({ contents: '<img src="https://lwi.nexon.com/sunday.png">' });
+      }
+      return Response.json({ event_notice: [delayedNotice] });
+    }
+    pushCalls++;
+    return new Response(null, { status: 201 });
+  }) as typeof fetch;
+
+  step = 1;
+  assert.deepEqual(
+    await runScheduledSync(kv, 'k', new Date('2026-11-27T10:00:00+09:00'), mockFetch, { vapid }),
+    { action: 'waiting_notice', attempts: 1 }
+  );
+  step = 2;
+  assert.deepEqual(
+    await runScheduledSync(kv, 'k', new Date('2026-11-27T10:01:00+09:00'), mockFetch, { vapid }),
+    { action: 'waiting_notice', attempts: 2 }
+  );
+  assert.equal(pushCalls, 0);
+
+  step = 3;
+  assert.deepEqual(
+    await runScheduledSync(kv, 'k', new Date('2026-11-27T10:02:00+09:00'), mockFetch, { vapid }),
+    { action: 'synced', attempts: 3 }
+  );
+  assert.equal(pushCalls, 1);
+
+  step = 4;
+  assert.deepEqual(
+    await runScheduledSync(kv, 'k', new Date('2026-11-27T10:03:00+09:00'), mockFetch, { vapid }),
+    { action: 'skipped_success', attempts: 3 }
+  );
+  assert.equal(pushCalls, 1);
 });

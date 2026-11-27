@@ -19,12 +19,12 @@ const MAX_BODY_BYTES = 4096;
 
 const CSP_POLICY = [
   "default-src 'self'",
-  "script-src 'self'",
+  "script-src 'self' https://yunyun.page",
   "worker-src 'self'",
   "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net",
   "font-src 'self' https://cdn.jsdelivr.net data:",
   "img-src 'self' https: data:",
-  "connect-src 'self'",
+  "connect-src 'self' https://yunyun.page",
   "object-src 'none'",
   "base-uri 'none'",
   "frame-ancestors 'none'",

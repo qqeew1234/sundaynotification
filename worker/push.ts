@@ -166,7 +166,7 @@ export async function notifySubscribersIfNewImage(
   const keys = await listAllSubscriptionKeys(kv);
   const payloadData = {
     title: '일요일 요정 · 썬데이 메이플',
-    body: notice.title,
+    body: `${notice.title} (${notice.startAt} ~ ${notice.endAt})`,
     image: notice.imageUrl,
     icon: 'https://sundaynotification.yunyun.page/favicon.png',
     badge: 'https://sundaynotification.yunyun.page/favicon.png',

@@ -245,6 +245,12 @@
   overflow-wrap: anywhere;
 }
 
+.event-content .b_srch {
+  opacity: 0;
+  pointer-events: none;
+  user-select: none;
+}
+
 .event-content img {
   display: block;
   width: 100%;

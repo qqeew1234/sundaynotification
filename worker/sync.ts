@@ -11,7 +11,7 @@ import type { PushKvStore, VapidConfig } from './push.ts';
 export const KV_CACHE_KEY = 'sunday:event:v1';
 export const KV_SYNC_STATE_KEY = 'sunday:sync-state:v1';
 export const KV_TTL_SECONDS = 60 * 60 * 24 * 14;
-export const MAX_ATTEMPTS_PER_DAY = 4; // 10:00 KST 1회 + 1분 간격 3회 재시도 (10:01, 10:02, 10:03)
+export const MAX_ATTEMPTS_PER_DAY = 4; // 평일(토~목) 10:00 KST 1회 + 1분 간격 3회 재시도
 
 export interface CachedSundayEvent {
   notice: SundayEventNotice | null;
@@ -20,7 +20,7 @@ export interface CachedSundayEvent {
 
 export interface SyncState {
   dateKst: string;
-  status: 'success' | 'failed';
+  status: 'success' | 'waiting_notice' | 'failed';
   attempts: number;
   lastAttemptAt: string;
   lastSuccessAt: string | null;
@@ -34,6 +34,7 @@ export interface KvStore {
 
 export type ScheduledSyncResult =
   | { action: 'synced'; attempts: number }
+  | { action: 'waiting_notice'; attempts: number }
   | { action: 'failed'; attempts: number }
   | { action: 'skipped_success'; attempts: number }
   | { action: 'skipped_exhausted'; attempts: number };
@@ -42,6 +43,10 @@ export interface SyncOptions {
   vapid?: VapidConfig | null;
   pushKv?: PushKvStore;
   throwOnDetailError?: boolean;
+}
+
+export function isKstFriday(now: Date): boolean {
+  return new Date(now.getTime() + 9 * 60 * 60 * 1000).getUTCDay() === 5;
 }
 
 function isPushKvStore(kv: KvStore): kv is PushKvStore {
@@ -162,6 +167,7 @@ export async function runScheduledSync(
   options?: Omit<SyncOptions, 'throwOnDetailError'>
 ): Promise<ScheduledSyncResult> {
   const todayKst = getKstDateString(now);
+  const isFriday = isKstFriday(now);
   const state = await readSyncState(kv);
   const sameDay = state?.dateKst === todayKst;
 
@@ -176,7 +182,7 @@ export async function runScheduledSync(
     return { action: 'skipped_success', attempts: state.attempts };
   }
 
-  if (sameDay && state.attempts >= MAX_ATTEMPTS_PER_DAY) {
+  if (sameDay && !isFriday && state.attempts >= MAX_ATTEMPTS_PER_DAY) {
     console.log(
       JSON.stringify({
         message: 'scheduled_sync_skipped_exhausted',
@@ -191,10 +197,30 @@ export async function runScheduledSync(
   const nowIso = now.toISOString();
 
   try {
-    await syncSundayEventToKv(kv, apiKey, now, fetchImpl, {
+    const result = await syncSundayEventToKv(kv, apiKey, now, fetchImpl, {
       ...options,
       throwOnDetailError: true,
     });
+
+    if (isFriday && (!result.notice || !result.notice.imageUrl)) {
+      await writeSyncState(kv, {
+        dateKst: todayKst,
+        status: 'waiting_notice',
+        attempts,
+        lastAttemptAt: nowIso,
+        lastSuccessAt: state?.lastSuccessAt ?? null,
+        lastError: null,
+      });
+      console.log(
+        JSON.stringify({
+          message: 'scheduled_sync_waiting_notice',
+          dateKst: todayKst,
+          attempts,
+        })
+      );
+      return { action: 'waiting_notice', attempts };
+    }
+
     await writeSyncState(kv, {
       dateKst: todayKst,
       status: 'success',
@@ -226,7 +252,7 @@ export async function runScheduledSync(
         message: 'scheduled_sync_failed',
         dateKst: todayKst,
         attempts,
-        willRetry: attempts < MAX_ATTEMPTS_PER_DAY,
+        willRetry: isFriday || attempts < MAX_ATTEMPTS_PER_DAY,
         error: errorMessage,
       })
     );
